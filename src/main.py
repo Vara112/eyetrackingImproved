@@ -6,7 +6,7 @@ THRESHOLD_VAL   = 50
 FRAME_HEIGHT    = 480
 FRAME_WIDTH     = 640
 
-#def process_frame():
+MASK_SIZE = 150
 
 
 def find_darkest_area(frame):
@@ -18,10 +18,10 @@ def find_darkest_area(frame):
         Slide window across frame -> Sum windowSkip * window Area pixels -> Calculates if darkest window found
 
     Returns:
-        Center of darkest window
+        Center of darkest window + average darkest value of that window
     '''
     #Make sure values are multiples of the frame dimensions
-    border          = 20             #Border around frame to be ignored
+    border          = 30             #Border around frame to be ignored
     windowSize      = 20             #Window size used for scanning
     windowSkip      = 10             #How far the window can jump when scanning (windowSkip < windowSize = overlapping scanning)
     #innerWindowSkip = 5              #Step size for within a window
@@ -61,11 +61,94 @@ def find_darkest_area(frame):
     centerX = windowsX[darkX] + windowSize // 2
     centerY = windowsY[darkY] + windowSize // 2
 
-    return (centerX, centerY)
+    avgDark = windowSums[darkY, darkX]/(windowSize * windowSize)
 
+    return (centerX, centerY), avgDark
+
+
+def bin_threshold(frame, darkestVal, addedThreshold):
+    """
+    Applies a tailored threshold filter to a frame
+
+    Inputs:
+        frame: frame numpy array
+        darkestVal: The 'estimated' darkest value of the frame
+        addedThreshold: Some value to be added to the threshold
+    
+    Output:
+        threshFrame: The frame with threshold applied
+    """
+
+    threshold = darkestVal + addedThreshold
+    _, threshFrame = cv2.threshold(frame, threshold, 255, cv2.THRESH_BINARY_INV)
+    return threshFrame
+
+
+def mask_eye(frame, x, y, size):
+    """
+    There can be random noise caused from shadows and other interference. This function aims to reduce that by applying
+    a mask around the center of the darkest area.
+
+    Inputs:
+        frame: frame numpy array
+        x, y: x and y cords for the middle of the darkest window found earlier
+        size: Size of the mask to be applied around the center
+    
+    Output:
+        frame with data around the center of darkest area removed
+    """   
+
+    mask = np.zeros_like(frame)         #2D array of 0's to match frame size
+
+    leftX = x-(size//2) if x-(size//2) > 0 else 0
+    leftY = y-(size//2) if y-(size//2) > 0 else 0
+
+    rightX = x+(size//2) if x+(size//2) < frame.shape[1] else frame.shape[1]
+    rightY = y+(size//2) if y+(size//2) < frame.shape[0] else frame.shape[0]
+
+    mask[leftY:rightY, leftX:rightX] = 255
+
+    return cv2.bitwise_and(frame, mask)
+
+def process_frame(frame):
+
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    
+    (darkX, darkY), darkness = find_darkest_area(gray)
+
+    threshStrict = bin_threshold(gray, darkness, 5)
+    threshMed = bin_threshold(gray, darkness, 15)
+    threshRelax = bin_threshold(gray, darkness, 25)
+
+    threshStrict = mask_eye(threshStrict, darkX, darkY, MASK_SIZE)
+    threshMed = mask_eye(threshMed, darkX, darkY, MASK_SIZE)
+    threshRelax = mask_eye(threshRelax, darkX, darkY, MASK_SIZE)
+
+    return threshStrict, threshMed, threshRelax   
+    
 
 #def alt_pupil_detection(vidPtr):
 
+def threshold_test(cap):
+    """
+    Just for testing. Holds logic for displaying windows for the video
+    """
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+ 
+        threshStrict,threshMed, threshRelax = process_frame(frame)
+ 
+        cv2.imshow('Strict Threshold', threshStrict)
+        cv2.imshow('Medium Threshold', threshMed)
+        cv2.imshow('Relaxed Threshold', threshRelax)
+
+        if cv2.waitKey(30) & 0xFF == ord('q'):
+            break
+ 
+    cap.release()
+    cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
