@@ -9,7 +9,7 @@ FRAME_WIDTH     = 640
 MASK_SIZE = 150
 
 CORNER_BLOCK_WIDTH  = 100                   #There is an issue with the top right of each frame being detected as a pupil
-CORNER_BLOCK_HEIGHT = 100                   #Bandaid fix: Chop that part of the frame off
+CORNER_BLOCK_HEIGHT = 100                   #Band-aid fix: Chop that part of the frame off
 
 
 def block_top_right(frame):
@@ -235,6 +235,27 @@ def process_frame(frame):
     
 
 #def alt_pupil_detection(vidPtr):
+def ellipse_to_line(ellipse, length=200):
+    """
+    Returns two points defining a line through the ellipse center oriented along its angle 
+
+    The gaze line seems to always pass through (or get close) to a point roughly in the center.
+    We need to estimate that point which will be used as our eye center.
+
+    """
+    (cx, cy), (_, minor_axis), angle = ellipse
+    angleRad = np.deg2rad(angle)
+
+    dx = np.cos(angleRad)
+    dy = np.sin(angleRad)
+
+    #p1 = (c_x - length * cos(Theta), cy - length*sin(theta))
+    #p2 = (c_x + length * cos(Theta), cy + length*sin(theta))
+    p1 = (int(cx - dx * length), int(cy - dy * length))
+    p2 = (int(cx + dx * length), int(cy + dy * length))
+    return p1, p2
+
+
 
 def visualize_test(cap):
     while True:
@@ -249,11 +270,15 @@ def visualize_test(cap):
 
         if bestEllipse is not None:
             cv2.ellipse(frame, bestEllipse, (0, 255, 0), 2)
+
+            p1, p2 = ellipse_to_line(bestEllipse)
+            cv2.line(frame, p1, p2, (255, 0, 255), 1)
             center = tuple(map(int, bestEllipse[0]))
             cv2.circle(frame, center, 3, (255, 255, 0), -1)
 
         cv2.putText(frame, f"score: {score:.2f}", (10, 30),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        
 
         cv2.imshow('Pupil Detection', frame)
 
