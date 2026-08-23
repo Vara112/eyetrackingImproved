@@ -217,7 +217,7 @@ def process_frame(frame):
         dilate = cv2.dilate(img, kernel, iterations=2)  #Maybe help with artifacting?
         contours, _ = cv2.findContours(dilate, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        contour = largest_contour(contours, pixelThresh=1000, ratio=3)  #TODO tweak values
+        contour = largest_contour(contours, pixelThresh=1000, ratio=2)  #TODO tweak values
 
         if contour is None or len(contour) < 5:
             continue
@@ -277,7 +277,7 @@ if __name__ == "__main__":
     '''
 
 
-    cap = cv2.VideoCapture('vids/eye_normal.avi')
+    cap = cv2.VideoCapture('vids/eye_around.avi')
 
     visualize_test(cap)
 
