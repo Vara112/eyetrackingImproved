@@ -2,7 +2,9 @@
 import cv2
 import numpy as np
 
-THRESHOLD_VAL = 65
+THRESHOLD_VAL   = 50
+FRAME_HEIGHT    = 480
+FRAME_WIDTH     = 640
 
 def threshold_test(vidPtr):
     #cv2.namedWindow('controls')
@@ -10,8 +12,6 @@ def threshold_test(vidPtr):
 
     prevCenter = None
     maxJump = 150    #TODO
-    eyeCenter = (cx_est, cy_est)
-    eyeRadius = 150   
 
     
     while True:
@@ -88,6 +88,34 @@ def threshold_test(vidPtr):
             cv2.destroyAllWindows()
             exit()
 
+def process_frame():
+
+
+def find_darkest_area(frame):
+    '''
+    Input:
+        Gray scale frame
+        
+        
+        Slide window across frame -> Sum windowSkip * window Area pixels -> Calculates if darkest window found
+
+    Returns:
+        Center of darkest window
+    '''
+    border          = 20             #Border around frame to be ignored
+    windowSize      = 20             #Window size used for scanning
+    windowSkip      = 10             #How far the window can jump when scanning (windowSkip < windowSize = overlapping scanning)
+    innerWindowSkip = 5              #Step size for within a window
+
+    #frame[y, x]
+
+    for y in range(FRAME_HEIGHT)
+
+
+
+def alt_pupil_detection(vidPtr):
+
+
 
 if __name__ == "__main__":
     '''
@@ -99,6 +127,6 @@ if __name__ == "__main__":
     '''
 
 
-    cap = cv2.VideoCapture('vids/around.avi')
+    cap = cv2.VideoCapture('vids/eye_normal.avi')
 
     threshold_test(cap)
