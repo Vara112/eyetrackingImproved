@@ -1,6 +1,7 @@
 
 import cv2
 import numpy as np
+import random
 
 THRESHOLD_VAL   = 50
 FRAME_HEIGHT    = 480
@@ -11,6 +12,15 @@ MASK_SIZE = 150
 CORNER_BLOCK_WIDTH  = 100                   #There is an issue with the top right of each frame being detected as a pupil
 CORNER_BLOCK_HEIGHT = 100                   #Band-aid fix: Chop that part of the frame off
 
+
+ray_lines = []                              #Accumulates confident ellipses over time
+stored_intersections = []
+MAX_RAY_LINES = 100
+MAX_STORED_INTERSECTIONS = 1500
+MIN_ANGLE_DIFF = 8                          #Ignore ellipses with similar angles 
+PIXEL_AGREEMENT_LIMIT = 30
+
+PUPIL_CONFIDENCE_THRESHOLD_SPHERE = 0.65
 
 def block_top_right(frame):
     """
@@ -255,9 +265,71 @@ def ellipse_to_line(ellipse, length=200):
     p2 = (int(cx + dx * length), int(cy + dy * length))
     return p1, p2
 
+def find_line_intersection(ellipse1, ellipse2):
+    (cx1, cy1), (_, _), angle1 = ellipse1
+    (cx2, cy2), (_, _), angle2 = ellipse2
 
+    angle1_rad = np.deg2rad(angle1)
+    angle2_rad = np.deg2rad(angle2)
+
+    dx1, dy1 = np.cos(angle1_rad), np.sin(angle1_rad)
+    dx2, dy2 = np.cos(angle2_rad), np.sin(angle2_rad)
+
+    #Solve (cx1,cy1) + t1*(dx1,dy1) = (cx2,cy2) + t2*(dx2,dy2)
+    A = np.array([[dx1, -dx2], [dy1, -dy2]])
+    B = np.array([cx2 - cx1, cy2 - cy1])
+
+    if np.linalg.det(A) == 0:
+        return None 
+
+    t1, t2 = np.linalg.solve(A, B)
+
+    intersection_x = cx1 + t1 * dx1
+    intersection_y = cy1 + t1 * dy1
+
+    return (int(intersection_x), int(intersection_y))
+
+
+def estimate_eye_center(frameShape):
+    """
+    
+    Every time function is called, it takes two random ellipses stored from previous frames and calculates the intersection
+    of their gaze line. This intersection is added to a list where the average intersection is found to try to best estimate
+    the eye center.
+    
+    """
+    global ray_lines, stored_intersections
+
+    if len(ray_lines) <= 1:
+        return None 
+    
+    height, width = frameShape[:2]
+    
+    a, b = random.sample(ray_lines, 2)  #Take 2 random eclipses 
+    angle_diff = abs(a[2] - b[2])
+
+    if angle_diff < MIN_ANGLE_DIFF:
+        return None 
+    intersection = find_line_intersection(a, b)
+
+    if intersection is None:
+        return None
+
+    if not (0 <= intersection[0] < width and 0 <= intersection[1] < height):
+        return None  #nonsense point outside the frame -> discard
+
+    stored_intersections.append(intersection)
+
+    if len(stored_intersections) > MAX_STORED_INTERSECTIONS:
+        stored_intersections = stored_intersections[-MAX_STORED_INTERSECTIONS:]
+
+    avg_x = np.mean([p[0] for p in stored_intersections])
+    avg_y = np.mean([p[1] for p in stored_intersections])
+
+    return (int(avg_x), int(avg_y))
 
 def visualize_test(cap):
+    global ray_lines
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -275,6 +347,15 @@ def visualize_test(cap):
             cv2.line(frame, p1, p2, (255, 0, 255), 1)
             center = tuple(map(int, bestEllipse[0]))
             cv2.circle(frame, center, 3, (255, 255, 0), -1)
+
+
+        if bestEllipse is not None and score > PUPIL_CONFIDENCE_THRESHOLD_SPHERE:   #TODO
+            ray_lines.append(bestEllipse)
+            if len(ray_lines) > MAX_RAY_LINES:
+                ray_lines = ray_lines[-MAX_RAY_LINES:]
+        eye_center = estimate_eye_center(frame.shape)
+        if eye_center is not None:
+            cv2.circle(frame, eye_center, 6, (255, 255, 0), -1)
 
         cv2.putText(frame, f"score: {score:.2f}", (10, 30),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
