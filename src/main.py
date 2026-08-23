@@ -110,6 +110,68 @@ def mask_eye(frame, x, y, size):
 
     return cv2.bitwise_and(frame, mask)
 
+
+def largest_contour(contours, pixelThresh, ratio):
+
+    maxFound = 0
+    maxContour = None
+
+    for contour in contours:
+        area = cv2.contourArea(contour)
+
+        if area >= pixelThresh:
+            x, y, w, h = cv2.boundingRect(contour)
+            
+            if max(w/h, h/w) <= ratio:
+
+                if area > maxFound:
+                    maxFound = area
+                    maxContour = contour
+    
+    return maxContour
+
+
+def check_ellipse_area_quality(frame, contour):
+
+    ellipseQuality = 0
+
+    ellipse = cv2.fitEllipse(contour)
+
+
+    mask = np.zeros_like(frame)
+    cv2.ellipse(mask, ellipse, (255), -1)
+
+    ellipseArea = np.sum(mask == 255)
+    covered_pixels = np.sum((frame == 255) & (mask == 255))         #Tellys up all pixels of elipse that is actually placed on a white pixel
+
+    if ellipseArea == 0:
+        return ellipseQuality
+
+    ellipseQuality = covered_pixels / ellipseArea                                       #Ratio of inside the ellipse actually on the threshold
+    return ellipseQuality
+
+
+def check_ellipse_boundary_quality(contour, imgShape):
+
+    contourMask = np.zeros(imgShape, dtype=np.uint8)
+    cv2.drawContours(contourMask, [contour], -1, 255, 1)
+
+    ellipse = cv2.fitEllipse(contour)
+    ellipse_mask_thick = np.zeros(imgShape, dtype=np.uint8)
+    ellipse_mask_thin = np.zeros(imgShape, dtype=np.uint8)
+    cv2.ellipse(ellipse_mask_thick, ellipse, 255, 10)
+    cv2.ellipse(ellipse_mask_thin, ellipse, 255, 4)
+
+    thickCount = np.sum(cv2.bitwise_and(contourMask, ellipse_mask_thick) > 0)
+    thinCount = np.sum(cv2.bitwise_and(contourMask, ellipse_mask_thin) > 0)
+
+    total_border_pixels = np.sum(contourMask > 0)
+    ratio_under_ellipse = thinCount / total_border_pixels if total_border_pixels > 0 else 0
+
+    return thickCount, ratio_under_ellipse
+
+
+
 def process_frame(frame):
 
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -124,29 +186,62 @@ def process_frame(frame):
     threshMed = mask_eye(threshMed, darkX, darkY, MASK_SIZE)
     threshRelax = mask_eye(threshRelax, darkX, darkY, MASK_SIZE)
 
-    return threshStrict, threshMed, threshRelax   
+    #return threshStrict, threshMed, threshRelax
+
+    kernel = np.ones((5, 5), np.uint8)   #Grow why by roughly 2
+    bestScore = 0
+    bestEllipse = None
+    for img in [threshStrict, threshMed, threshRelax]:
+
+        dilate = cv2.dilate(img, kernel, iterations=2)  #Maybe help with artifacting?
+        contours, _ = cv2.findContours(dilate, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        contour = largest_contour(contours, pixelThresh=1000, ratio=3)  #TODO tweak values
+
+        if contour is None or len(contour) < 5:
+            continue
+
+        areaQuality = check_ellipse_area_quality(dilate, contour)
+        thickCount, boundaryRatio = check_ellipse_boundary_quality(contour, dilate.shape)
+
+        score = areaQuality * (thickCount ** 2) * boundaryRatio
+
+        if score > bestScore:
+            bestScore = score
+            bestEllipse = cv2.fitEllipse(contour)
+
+    return bestEllipse, (darkX, darkY), bestScore
     
 
 #def alt_pupil_detection(vidPtr):
 
-def threshold_test(cap):
-    """
-    Just for testing. Holds logic for displaying windows for the video
-    """
+def visualize_test(cap):
     while True:
         ret, frame = cap.read()
         if not ret:
             break
- 
-        threshStrict,threshMed, threshRelax = process_frame(frame)
- 
-        cv2.imshow('Strict Threshold', threshStrict)
-        cv2.imshow('Medium Threshold', threshMed)
-        cv2.imshow('Relaxed Threshold', threshRelax)
 
-        if cv2.waitKey(30) & 0xFF == ord('q'):
+        bestEllipse, (darkX, darkY), score = process_frame(frame)
+
+        # Mark the darkest-area center (sanity check this is tracking the pupil)
+        cv2.circle(frame, (darkX, darkY), 4, (0, 0, 255), -1)
+
+        if bestEllipse is not None:
+            cv2.ellipse(frame, bestEllipse, (0, 255, 0), 2)
+            center = tuple(map(int, bestEllipse[0]))
+            cv2.circle(frame, center, 3, (255, 255, 0), -1)
+
+        cv2.putText(frame, f"score: {score:.2f}", (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+        cv2.imshow('Pupil Detection', frame)
+
+        key = cv2.waitKey(30) & 0xFF
+        if key == ord('q'):
             break
- 
+        elif key == ord(' '):
+            cv2.waitKey(0)  # pause on spacebar
+
     cap.release()
     cv2.destroyAllWindows()
 
@@ -163,4 +258,5 @@ if __name__ == "__main__":
 
     cap = cv2.VideoCapture('vids/eye_normal.avi')
 
-    threshold_test(cap)
+    visualize_test(cap)
+
