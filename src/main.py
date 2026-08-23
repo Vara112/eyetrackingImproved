@@ -8,6 +8,12 @@ def threshold_test(vidPtr):
     #cv2.namedWindow('controls')
     #cv2.createTrackbar('thresh', 'controls', 50, 255, lambda x: None)
 
+    prevCenter = None
+    maxJump = 150    #TODO
+    eyeCenter = (cx_est, cy_est)
+    eyeRadius = 150   
+
+    
     while True:
         ret, frame = vidPtr.read()
 
@@ -51,8 +57,24 @@ def threshold_test(vidPtr):
                 cx = int(M['m10'] / M['m00'])
                 cy = int(M['m01'] / M['m00'])
 
-                cv2.drawContours(dispFrame, [largestContour], -1, (255, 0, 0), 2)
-                cv2.circle(dispFrame, (cx, cy), 5, (0, 0, 255), -1)
+
+                realisticJump = True
+                if prevCenter is not None:
+                    dist = ((cx - prevCenter[0])**2 + (cy - prevCenter[1])**2) ** 0.5   #Calcs distance of pupil jump
+                    if dist > maxJump:
+                        realisticJump = False #Too far
+                
+                if realisticJump:
+                    prevCenter = (cx, cy)
+                    if len(largestContour) >= 5:
+                        ellipse = cv2.fitEllipse(largestContour)
+                        cv2.ellipse(dispFrame, ellipse, (0, 255, 0), 2)
+                        cv2.circle(dispFrame, prevCenter, 5, (0, 0, 255), -1)
+                    else: #Rejected
+                        if prevCenter is not None:
+
+                            cv2.circle(dispFrame, prevCenter, 5, (0, 165, 255), -1)     #Make orange to show using old data DEBUGGING
+
 
 
 
@@ -77,6 +99,6 @@ if __name__ == "__main__":
     '''
 
 
-    cap = cv2.VideoCapture('vids/normal.avi')
+    cap = cv2.VideoCapture('vids/around.avi')
 
     threshold_test(cap)
