@@ -8,6 +8,26 @@ FRAME_WIDTH     = 640
 
 MASK_SIZE = 150
 
+CORNER_BLOCK_WIDTH  = 100                   #There is an issue with the top right of each frame being detected as a pupil
+CORNER_BLOCK_HEIGHT = 100                   #Bandaid fix: Chop that part of the frame off
+
+
+def block_top_right(frame):
+    """
+    Sets the top-right rectangular region of a grayscale frame to white (255) so 
+    it is ignored in calculations
+ 
+    Inputs:
+        frame: grayscale frame numpy array
+        width, height: size in pixels of the corner region to block, measured
+                        from the top-right corner inward
+    Output:
+        frame with the top-right corner blanked out
+    """
+    frame[0:CORNER_BLOCK_HEIGHT, frame.shape[1] - CORNER_BLOCK_WIDTH:frame.shape[1]] = 255
+    return frame
+
+
 
 def find_darkest_area(frame):
     '''
@@ -175,7 +195,8 @@ def check_ellipse_boundary_quality(contour, imgShape):
 def process_frame(frame):
 
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    
+    gray = block_top_right(gray)
+
     (darkX, darkY), darkness = find_darkest_area(gray)
 
     threshStrict = bin_threshold(gray, darkness, 5)
