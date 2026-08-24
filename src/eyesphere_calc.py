@@ -96,3 +96,14 @@ def estimate_eye_center(frameShape, ray_lines):
     avg_y = np.mean([p[1] for p in stored_intersections])
 
     return (int(avg_x), int(avg_y))
+
+
+def distance_to_pupil_outer_edge(eyeCenter, pupil_ellipse):
+
+    pupilCenter, axes, angle_degrees = pupil_ellipse
+    xDist = pupilCenter[0] - eyeCenter[0]
+    yDist = pupilCenter[1] - pupilCenter[1]
+
+    dist = (xDist**2 + yDist**2) ** 0.5
+
+    print(dist)

@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 import random
 
-from eyesphere_calc import ellipse_to_line, find_line_intersection, estimate_eye_center
+from eyesphere_calc import ellipse_to_line, find_line_intersection, estimate_eye_center, distance_to_pupil_outer_edge
 from pupil_tracking import process_frame
 
 
@@ -48,6 +48,8 @@ def visualize_test(cap):
         
         if eye_center is not None:
             cv2.circle(frame, eye_center, 6, (255, 255, 0), -1)
+            if bestEllipse is not None:
+                distance_to_pupil_outer_edge(eye_center, bestEllipse)
 
         cv2.putText(frame, f"score: {score:.2f}", (10, 30),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
