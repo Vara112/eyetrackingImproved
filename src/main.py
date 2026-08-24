@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 import random
 
-from eyesphere_calc import ellipse_to_line, find_line_intersection, estimate_eye_center, distance_to_pupil_outer_edge
+from eyesphere_calc import ellipse_to_line, find_line_intersection, estimate_eye_center, update_eye_radius
 from pupil_tracking import process_frame
 
 
@@ -45,11 +45,16 @@ def visualize_test(cap):
             if len(ray_lines) > MAX_RAY_LINES:
                 ray_lines = ray_lines[-MAX_RAY_LINES:]
         eye_center = estimate_eye_center(frame.shape, ray_lines)
-        
         if eye_center is not None:
             cv2.circle(frame, eye_center, 6, (255, 255, 0), -1)
-            if bestEllipse is not None:
-                distance_to_pupil_outer_edge(eye_center, bestEllipse)
+
+
+        if bestEllipse is not None and boundaryRatio > PUPIL_CONFIDENCE_THRESHOLD_SPHERE:
+            radius = update_eye_radius(bestEllipse)
+            if radius is not None:
+                cv2.circle(frame, eye_center, int(radius), (255, 50, 50), 2) 
+
+
 
         cv2.putText(frame, f"score: {score:.2f}", (10, 30),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)

@@ -2,6 +2,7 @@
 import cv2
 import numpy as np
 import random
+import math
 
 
 
@@ -9,9 +10,14 @@ import random
 
 stored_intersections = []
 MAX_STORED_INTERSECTIONS = 1500
-MIN_ANGLE_DIFF = 8                          #Ignore ellipses with similar angles 
+MIN_ANGLE_DIFF = 8                          #Ignore ellipses with similar angles
 PIXEL_AGREEMENT_LIMIT = 30
 
+center_history = []
+MAX_CENTER_HISTORY = 30                     #How many recent estimates to judge stability over
+STABILITY_PIXEL_THRESHOLD = 5               #Max pixel spread allowed across the history to call it stable
+
+max_observed_distance = 0
 
 
 def ellipse_to_line(ellipse, length=200):
@@ -68,6 +74,7 @@ def estimate_eye_center(frameShape, ray_lines):
 
     """
     global stored_intersections
+    global center_history
 
     if len(ray_lines) <= 1:
         return None 
@@ -95,15 +102,70 @@ def estimate_eye_center(frameShape, ray_lines):
     avg_x = np.mean([p[0] for p in stored_intersections])
     avg_y = np.mean([p[1] for p in stored_intersections])
 
+    center_history.append((avg_x, avg_y))
+    if len(center_history) > MAX_CENTER_HISTORY:
+        center_history = center_history[-MAX_CENTER_HISTORY:]
+
     return (int(avg_x), int(avg_y))
+
+def center_is_stable():
+    """
+    Returns True once the last 5 eye-center estimates have all stayed within STABILITY_PIXEL_THRESHOLD 
+    pixels of each other. This gives insight if the center value is safe to use
+    """
+    if len(center_history) < MAX_CENTER_HISTORY:
+        return False  #not enough estimates yet to judge stability
+
+    xs = [p[0] for p in center_history[-5:]]    #Just look at last 5 instead of all of them (not sure performance cost)
+    ys = [p[1] for p in center_history[-5:]]
+
+    spread = max(max(xs) - min(xs), max(ys) - min(ys))
+
+    return spread <= STABILITY_PIXEL_THRESHOLD
 
 
 def distance_to_pupil_outer_edge(eyeCenter, pupilEllipse):
 
-    pupilCenter, axes, angle_degrees = pupilEllipse
+    pupilCenter, axes, angleDeg = pupilEllipse
     xDist = pupilCenter[0] - eyeCenter[0]
     yDist = pupilCenter[1] - eyeCenter[1]
 
-    dist = (xDist**2 + yDist**2) ** 0.5
+    distCenterToCenter = (xDist**2 + yDist**2) ** 0.5       #Distance from center of pupil, to center of eye
 
-    print(dist)
+    ellipseRadiusX= axes[0]/2
+    ellipseRadiusY= axes[0]/2
+
+    if distCenterToCenter == 0 or ellipseRadiusX  <= 0 or ellipseRadiusY <= 0:
+        return None
+    
+    #Convert radius' to follow correct angle
+
+    unitVecX, unitVecY = xDist / distCenterToCenter, yDist/ distCenterToCenter
+
+    thetaRads = math.radians(angleDeg)
+    cosine = math.cos(thetaRads)
+    sine = math.sin(thetaRads)
+
+    #Trying to calculate the distance from the center of ellipse to the edge
+    localisedX = cosine * unitVecX + sine * unitVecY
+    localisedY = -sine * unitVecX + cosine * unitVecY
+
+    edgeOffset = (1 / math.sqrt((localisedX / ellipseRadiusX) ** 2
+        + (localisedX / ellipseRadiusY) ** 2))
+
+    return distCenterToCenter + edgeOffset
+
+def update_eye_radius(pupil_ellipse):
+
+    global max_observed_distance
+
+    if not center_is_stable():
+        return 
+
+    distance = distance_to_pupil_outer_edge(center_history[-1], pupil_ellipse) 
+    #Safe to use last eye center found since at this point values are stable (ish) TODO FACT CHECK THIS
+
+    if distance is not None and distance > max_observed_distance:
+        max_observed_distance = distance
+    return max_observed_distance
+
