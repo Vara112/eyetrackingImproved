@@ -25,7 +25,7 @@ def visualize_test(cap):
         ret, frame = cap.read()
         if not ret:
             break
-
+        frame = cv2.rotate(frame, cv2.ROTATE_180)
         bestEllipse, (darkX, darkY), score, boundaryRatio = process_frame(frame)
 
         # Mark the darkest-area center (sanity check this is tracking the pupil)
@@ -49,8 +49,8 @@ def visualize_test(cap):
             cv2.circle(frame, eye_center, 6, (255, 255, 0), -1)
 
 
-        if bestEllipse is not None and boundaryRatio > PUPIL_CONFIDENCE_THRESHOLD_SPHERE:
-            radius = update_eye_radius(bestEllipse)
+        if bestEllipse is not None and boundaryRatio > PUPIL_CONFIDENCE_THRESHOLD_SPHERE and eye_center is not None:
+            radius = update_eye_radius(eye_center, bestEllipse)
             if radius is not None:
                 cv2.circle(frame, eye_center, int(radius), (255, 50, 50), 2) 
 
@@ -73,16 +73,17 @@ def visualize_test(cap):
 
 
 if __name__ == "__main__":
-    '''
+    
     cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     cap.set(cv2.CAP_PROP_FPS, 120)
-    '''
+
+    
 
 
-    cap = cv2.VideoCapture('vids/eye_around.avi')
+    #cap = cv2.VideoCapture('vids/eye_around.avi')
 
     visualize_test(cap)
 

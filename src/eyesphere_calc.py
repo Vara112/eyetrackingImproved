@@ -133,7 +133,7 @@ def distance_to_pupil_outer_edge(eyeCenter, pupilEllipse):
     distCenterToCenter = (xDist**2 + yDist**2) ** 0.5       #Distance from center of pupil, to center of eye
 
     ellipseRadiusX= axes[0]/2
-    ellipseRadiusY= axes[0]/2
+    ellipseRadiusY= axes[1]/2
 
     if distCenterToCenter == 0 or ellipseRadiusX  <= 0 or ellipseRadiusY <= 0:
         return None
@@ -151,18 +151,18 @@ def distance_to_pupil_outer_edge(eyeCenter, pupilEllipse):
     localisedY = -sine * unitVecX + cosine * unitVecY
 
     edgeOffset = (1 / math.sqrt((localisedX / ellipseRadiusX) ** 2
-        + (localisedX / ellipseRadiusY) ** 2))
+        + (localisedY / ellipseRadiusY) ** 2))
 
     return distCenterToCenter + edgeOffset
 
-def update_eye_radius(pupil_ellipse):
+def update_eye_radius(center, pupil_ellipse):
 
     global max_observed_distance
 
     if not center_is_stable():
         return 
 
-    distance = distance_to_pupil_outer_edge(center_history[-1], pupil_ellipse) 
+    distance = distance_to_pupil_outer_edge(center, pupil_ellipse) 
     #Safe to use last eye center found since at this point values are stable (ish) TODO FACT CHECK THIS
 
     if distance is not None and distance > max_observed_distance:
