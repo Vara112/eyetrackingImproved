@@ -14,6 +14,16 @@ MAX_RAY_LINES = 100
 
 PUPIL_CONFIDENCE_THRESHOLD_SPHERE = 0.65
 
+import pyautogui
+pyautogui.FAILSAFE = True
+
+screen_width, screen_height = pyautogui.size()
+
+
+def move_cursor(gaze, eye_center):
+    screen_x = int((-gaze[0] + 1) / 2 * screen_width)
+    screen_y = int((gaze[1] + 1) / 2 * screen_height)
+    pyautogui.moveTo(screen_x, screen_y, _pause=False)
 
 #def alt_pupil_detection(vidPtr):
 
@@ -81,6 +91,7 @@ def visualize_test(cap):
     cv2.destroyAllWindows()
 
 
+
 def calibration(cap):
 
     global ray_lines
@@ -136,7 +147,45 @@ def calibration(cap):
         
         key = cv2.waitKey(30) & 0xFF
         if key != 255 and stable:  #any key pressed
+            return eye_center, radius
+
+def tracking(cap, eye_center, radius, gaze_func=None):
+    while True:
+        ret, frame = cap.read()
+        if not ret:
             break
+
+        frame = cv2.rotate(frame, cv2.ROTATE_180)
+        bestEllipse, (darkX, darkY), score, boundaryRatio = process_frame(frame)
+
+        if bestEllipse is not None:
+            cv2.ellipse(frame, bestEllipse, (0, 255, 0), 2)
+
+            gaze = compute_gaze_vector(eye_center, radius, bestEllipse[0])
+            if gaze is not None:
+                end_x = int(eye_center[0] + gaze[0] * 100)
+                end_y = int(eye_center[1] + gaze[1] * 100)
+                cv2.line(frame, eye_center, (end_x, end_y), (0, 200, 255), 2)
+
+                cv2.putText(frame, f"gaze: ({gaze[0]:.2f}, {gaze[1]:.2f}, {gaze[2]:.2f})", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 200, 255), 2)
+
+            if gaze_func is not None:
+                #When a function is passed in, call it
+                gaze_func(gaze, eye_center)  
+
+
+        cv2.circle(frame, eye_center, 4, (255, 255, 0), -1)  #fixed center, drawn for reference
+
+        cv2.imshow('Eye Tracker', frame)
+
+        key = cv2.waitKey(30) & 0xFF
+        if key == ord('q'):
+            break
+        elif key == ord(' '):   #pause feature
+            cv2.waitKey(0)
+
+    cap.release()
+    cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
@@ -150,4 +199,7 @@ if __name__ == "__main__":
 
     #cap = cv2.VideoCapture('vids/eye_around.avi')
 
-    calibration(cap)
+    eye_center, radius = calibration(cap)
+
+    if eye_center is not None and radius is not None:
+        tracking(cap, eye_center, radius, gaze_func=move_cursor)
