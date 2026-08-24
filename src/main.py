@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 import random
 
-from eyesphere_calc import ellipse_to_line, find_line_intersection, estimate_eye_center, update_eye_radius
+from eyesphere_calc import ellipse_to_line, find_line_intersection, estimate_eye_center, update_eye_radius, center_is_stable
 from pupil_tracking import process_frame
 from gaze_calc import compute_gaze_vector
 
@@ -81,6 +81,64 @@ def visualize_test(cap):
     cv2.destroyAllWindows()
 
 
+def calibration(cap):
+
+    global ray_lines
+
+    eyeCenter = None
+    radius = None
+
+    while True:
+
+        ret, frame = cap.read()
+
+        if not ret:
+            #Error when grabbing frame
+            break
+        
+        frame = cv2.rotate(frame, cv2.ROTATE_180)   #Mounted upside-down (woops)
+
+        bestEllipse, (darkX, darkY), score, boundaryRatio = process_frame(frame)
+
+        if bestEllipse is not None:
+            #Draw best fitting ellipse around pupil
+            cv2.ellipse(frame, bestEllipse, (0, 255, 0), 2)
+            p1, p2 = ellipse_to_line(bestEllipse)   #Grab ellipse direction line
+            cv2.line(frame, p1, p2, (255, 0, 255), 1)
+
+        if bestEllipse is not None and boundaryRatio > PUPIL_CONFIDENCE_THRESHOLD_SPHERE:  
+            ray_lines.append(bestEllipse) #
+            if len(ray_lines) > MAX_RAY_LINES:
+                ray_lines = ray_lines[-MAX_RAY_LINES:]
+
+        eye_center = estimate_eye_center(frame.shape, ray_lines)
+        if eye_center is not None:
+            #Draw current guess for eye sphere center
+            cv2.circle(frame, eye_center, 6, (255, 255, 0), -1)
+
+            if bestEllipse is not None and boundaryRatio > PUPIL_CONFIDENCE_THRESHOLD_SPHERE:
+                radius = update_eye_radius(eye_center, bestEllipse) #Tries to update sphere radius if worthy ellipse
+                if radius is not None:
+                    cv2.circle(frame, eye_center, int(radius), (255, 50, 50), 2)
+
+        stable = center_is_stable()
+        if not stable:
+            cv2.putText(frame, "Calibrating... keep looking around",(10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+        else:
+            cv2.putText(frame, "CALIBRATION COMPLETE. Press any key to continue...", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+        cv2.imshow('Eye Tracker', frame)
+
+
+
+        if cv2.waitKey(30) & 0xFF == ord('q'):
+            return None, None  #Terminate
+        
+        key = cv2.waitKey(30) & 0xFF
+        if key != 255 and stable:  #any key pressed
+            break
+
+
 if __name__ == "__main__":
 
     cap = cv2.VideoCapture(0)
@@ -92,4 +150,4 @@ if __name__ == "__main__":
 
     #cap = cv2.VideoCapture('vids/eye_around.avi')
 
-    visualize_test(cap)
+    calibration(cap)
