@@ -12,6 +12,18 @@ MASK_SIZE = 150
 CORNER_BLOCK_WIDTH  = 100                   #There is an issue with the top right of each frame being detected as a pupil
 CORNER_BLOCK_HEIGHT = 100                   #Band-aid fix: Chop that part of the frame off
 
+MIN_ELLIPSE_ASPECT_RATIO = 0.5             #To try and remove thing ellipses (1.0 = circle, near 0 = sliver)
+
+
+
+def ellipse_aspect_ratio(ellipse):
+    (_, axes, _) = ellipse
+    minor, major = min(axes), max(axes)
+    if major == 0:
+        return 0
+    return minor / major
+
+
 
 def block_top_right(frame):
     """
@@ -224,6 +236,13 @@ def process_frame(frame):
         if contour is None or len(contour) < 5:
             continue
 
+
+        ellipse = cv2.fitEllipse(contour)
+
+        if ellipse_aspect_ratio(ellipse) < MIN_ELLIPSE_ASPECT_RATIO:
+            continue   #too thin -> we reject before it can it gets scored
+        
+        
         areaQuality = check_ellipse_area_quality(dilate, contour)
         thickCount, boundaryRatio = check_ellipse_boundary_quality(contour, dilate.shape)
 

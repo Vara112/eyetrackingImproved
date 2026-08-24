@@ -7,10 +7,9 @@ import random
 
 from eyesphere_calc import ellipse_to_line, find_line_intersection, estimate_eye_center, update_eye_radius
 from pupil_tracking import process_frame
+from gaze_calc import compute_gaze_vector
 
-
-
-ray_lines = []                              #Accumulates confident ellipses over time
+ray_lines = []                      #Accumulates confident ellipses over time
 MAX_RAY_LINES = 100
 
 PUPIL_CONFIDENCE_THRESHOLD_SPHERE = 0.65
@@ -22,9 +21,11 @@ PUPIL_CONFIDENCE_THRESHOLD_SPHERE = 0.65
 def visualize_test(cap):
     global ray_lines
     while True:
+
         ret, frame = cap.read()
         if not ret:
             break
+
         frame = cv2.rotate(frame, cv2.ROTATE_180)
         bestEllipse, (darkX, darkY), score, boundaryRatio = process_frame(frame)
 
@@ -48,16 +49,24 @@ def visualize_test(cap):
         if eye_center is not None:
             cv2.circle(frame, eye_center, 6, (255, 255, 0), -1)
 
-
         if bestEllipse is not None and boundaryRatio > PUPIL_CONFIDENCE_THRESHOLD_SPHERE and eye_center is not None:
             radius = update_eye_radius(eye_center, bestEllipse)
             if radius is not None:
                 cv2.circle(frame, eye_center, int(radius), (255, 50, 50), 2) 
 
 
+        if eye_center is not None and radius is not None and bestEllipse is not None:
+            gaze = compute_gaze_vector(eye_center, radius, bestEllipse[0])
+            if gaze is not None:
+                # Draw the gaze direction as a line extending from eye_center
+                end_x = int(eye_center[0] + gaze[0] * 100)
+                end_y = int(eye_center[1] + gaze[1] * 100)
+                cv2.line(frame, eye_center, (end_x, end_y), (0, 200, 255), 2)
 
-        cv2.putText(frame, f"score: {score:.2f}", (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv2.putText(frame, f"gaze: ({gaze[0]:.2f}, {gaze[1]:.2f}, {gaze[2]:.2f})",
+                            (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 200, 255), 2)
+                cv2.putText(frame, f"score: {score:.2f}", (10, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         
 
         cv2.imshow('Pupil Detection', frame)
@@ -73,17 +82,14 @@ def visualize_test(cap):
 
 
 if __name__ == "__main__":
-    
+
     cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     cap.set(cv2.CAP_PROP_FPS, 120)
-
     
-
 
     #cap = cv2.VideoCapture('vids/eye_around.avi')
 
     visualize_test(cap)
-
